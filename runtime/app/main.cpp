@@ -196,6 +196,8 @@ std::recursive_mutex& UiLock() {
     return m;
 }
 
+void RequestQuit() { PostMessageW(g_hwnd, WM_CLOSE, 0, 0); }
+
 void ApplyDisplay() { PostMessageW(g_hwnd, kApplyDisplay, 0, 0); }
 void OpenGameWindow(bool apply) { SendMessageW(g_hwnd, kOpenWindow, apply, 0); }
 

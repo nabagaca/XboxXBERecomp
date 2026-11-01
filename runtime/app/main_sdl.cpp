@@ -295,6 +295,12 @@ std::recursive_mutex& UiLock() {
     return m;
 }
 
+void RequestQuit() {
+    SDL_Event e{};
+    e.type = SDL_EVENT_QUIT;
+    SDL_PushEvent(&e);
+}
+
 void ApplyDisplay() {
     if (!g_window || !g_apply_event) return;
     SDL_Event e{};

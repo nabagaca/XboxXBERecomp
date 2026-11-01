@@ -38,6 +38,7 @@ void Save();
 void LogSettings();  // every setting, as the settings file has them
 void LogSystem();    // the machine and the settings, at a run's start
 void ApplyDisplay();  // any thread
+void RequestQuit();   // any thread: asks the host event loop to shut down
 struct Mode {
     uint32_t width, height;
 };
