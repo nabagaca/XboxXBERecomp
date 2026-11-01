@@ -38,6 +38,7 @@
 #include "core/log.h"
 #include "gpu/backend.h"
 #include "gpu/shaders.h"
+#include "gpu/fxaa.h"
 #include "gpu/spirv.h"
 #include "gpu/texture.h"
 #include "gpu/vertex.h"
@@ -270,16 +271,18 @@ struct PsoKey {
     int32_t zbias; float zslope; uint32_t rtfmt; uint32_t sref;
 };
 uint32_t SimpleState(const State& s, uint32_t method) { return s.simple[method >> 2]; }
-const char* kBlitHlsl = R"(
-cbuffer B : register(b1) { float4 uvrect; float4 opts; };
+const std::string kBlitHlsl = std::string(R"(
+cbuffer B : register(b1) { float4 uvrect; float4 opts; float4 aa; };
 Texture2D img : register(t0); Texture2D lut : register(t1);
 SamplerState ls : register(s0); SamplerState ps : register(s1);
+)") + kFxaaHlsl + R"(
 struct O { float4 p : SV_Position; float2 uv : TEXCOORD0; };
 O vs(uint id : SV_VertexID) { O o; float2 t = float2((id << 1) & 2, id & 2);
     o.p = float4(t * float2(2, -2) + float2(-1, 1), 0, 1); o.uv = uvrect.xy + t * uvrect.zw; return o; }
 float4 psmain(O i) : SV_Target { float4 c = 0; int n = max((int)opts.z, 1); float2 px = fwidth(i.uv);
     for (int y = 0; y < n; y++) for (int x = 0; x < n; x++) c += img.SampleLevel(ls, i.uv + px * ((float2(x, y) + 0.5) / n - 0.5), 0);
-    c /= n * n; c.rgb *= opts.w;
+    c /= n * n; if (aa.x > 0) c.rgb = Fxaa(i.uv);
+    c.rgb *= opts.w;
     if (opts.x > 0) c.rgb = float3(lut.Sample(ps, float2(c.r, 0.5)).r, lut.Sample(ps, float2(c.g, 0.5)).g, lut.Sample(ps, float2(c.b, 0.5)).b);
     return float4(c.rgb, opts.y > 0 ? c.a : 1); }
 )";
@@ -1242,8 +1245,8 @@ VkPipeline VulkanBackend::EnsurePipeline(const PsoKey& k, VkShaderModule vs, VkS
 VkPipeline VulkanBackend::EnsureBlitPipeline(VkFormat rtv, bool over, bool depthWrite, bool swap) {
     uint64_t key = (uint64_t(rtv) << 3) | (over ? 1 : 0) | (depthWrite ? 2 : 0) | (swap ? 4 : 0);
     auto it = blitPipelines_.find(key); if (it != blitPipelines_.end()) return it->second;
-    uint64_t h; VkShaderModule vs = CompileModule(depthWrite ? kDepthHlsl : kBlitHlsl, "vs", false, h);
-    VkShaderModule ps = CompileModule(depthWrite ? kDepthHlsl : kBlitHlsl, "psmain", true, h);
+    uint64_t h; VkShaderModule vs = CompileModule(depthWrite ? std::string(kDepthHlsl) : kBlitHlsl, "vs", false, h);
+    VkShaderModule ps = CompileModule(depthWrite ? std::string(kDepthHlsl) : kBlitHlsl, "psmain", true, h);
     VkPipeline pipe = VK_NULL_HANDLE;
     if (vs && ps) {
         VkPipelineVertexInputStateCreateInfo vi{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
@@ -1938,7 +1941,7 @@ void VulkanBackend::BlitToImage(VkFormat rtvFormat, uint32_t w, uint32_t h, Imag
     { VkSamplerCreateInfo si{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO}; si.magFilter = si.minFilter = VK_FILTER_LINEAR; si.addressModeU = si.addressModeV = si.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE; si.maxLod = VK_LOD_CLAMP_NONE; samplers[0] = GetSampler(si);
       si.magFilter = si.minFilter = VK_FILTER_NEAREST; si.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST; samplers[1] = GetSampler(si); }
     Alloc cb = UploadAlloc(256, 256); if (!cb.cpu) return;
-    float cc[8] = {uv[0], uv[1], uv[2], uv[3], gamma ? 1.0f : 0, alpha ? 1.0f : 0, float(taps), mul};
+    float cc[12] = {uv[0], uv[1], uv[2], uv[3], gamma ? 1.0f : 0, alpha ? 1.0f : 0, float(taps), mul, (swap && app::Get().fxaa) ? 1.0f : 0.0f, 0, 0, 0};
     std::memcpy(cb.cpu, cc, sizeof(cc));
     VkDescriptorSet set = AllocDrawSet(cb.buffer, cb.off, cb.buffer, cb.off, stages, samplers); if (!set) { LOG_FIRST(16, "vulkan: blit dropped, no descriptor set (rtv %d %ux%u present %llu)", int(rtvFormat), w, h, (unsigned long long)presents_); return; }
     vkCmdBindPipeline(Cmd(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe);

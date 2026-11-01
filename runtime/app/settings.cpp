@@ -75,6 +75,7 @@ void Load() {
     s.render_percent = t["render_percent"].value_or(s.render_percent);
     s.fps_cap = t["fps_cap"].value_or(s.fps_cap);
     s.vsync = t["vsync"].value_or(s.vsync);
+    s.fxaa = t["fxaa"].value_or(s.fxaa);
     s.aniso = t["anisotropic_filtering"].value_or(s.aniso);
     std::string aspect = t["aspect_ratio"].value_or(s.aspect_ratio);
     for (const NamedAspect& a : kAspects)
@@ -104,6 +105,7 @@ toml::table Table() {
                   {"render_percent", int64_t(s.render_percent)},
                   {"fps_cap", int64_t(s.fps_cap)},
                   {"vsync", s.vsync},
+                  {"fxaa", s.fxaa},
                   {"anisotropic_filtering", int64_t(s.aniso)},
                   {"aspect_ratio", s.aspect_ratio},
                   {"ultrawide", s.ultrawide},

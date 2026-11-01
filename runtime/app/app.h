@@ -21,6 +21,7 @@ struct Settings {
     uint32_t render_percent = 100;   // of the output height
     uint32_t fps_cap = 60;           // 0 unlimited
     bool vsync = true;
+    bool fxaa = true;               // presentation anti-aliasing
     uint32_t aniso = 0;              // 0 as the game asks
     // the shape the frame is drawn and shown at: auto is the real output aspect, else 4:3, 16:9, 16:10, 21:9 or 32:9
     std::string aspect_ratio = "auto";
